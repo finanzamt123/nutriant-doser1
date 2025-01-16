@@ -1,0 +1,132 @@
+# Nutrient Doser System for Raspberry Pi 3B+
+# Complete Code for Installation and Setup
+
+import os
+import time
+import sqlite3
+from flask import Flask, jsonify, request, render_template, send_file
+from flask_caching import Cache
+from threading import Thread
+import RPi.GPIO as GPIO
+
+# --- Configurations ---
+DATABASE = 'sensor_data.db'
+ARCHIVE_DATABASE = 'sensor_archive.db'
+CACHE_TIMEOUT = 60
+PUMP_PIN = 23
+LIGHT_PIN = 18
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(PUMP_PIN, GPIO.OUT)
+GPIO.setup(LIGHT_PIN, GPIO.OUT)
+
+# Flask App Initialization
+app = Flask(__name__)
+cache = Cache(config={'CACHE_TYPE': 'simple'})
+cache.init_app(app)
+
+# --- Database Setup ---
+def init_database():
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS sensor_data (
+                      id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                      ec REAL, ph REAL, temperature REAL,
+                      water_level REAL, light_intensity REAL)''')
+    conn.commit()
+    conn.close()
+
+# --- Sensor Simulation ---
+def read_sensors():
+    """Simulate reading sensor data."""
+    return {
+        "ec": 1.5,
+        "ph": 7.0,
+        "temperature": 22.5,
+        "water_level": 80,
+        "light_intensity": 1000
+    }
+
+# --- Automation ---
+def automation_loop():
+    while True:
+        sensor_data = read_sensors()
+        save_sensor_data(sensor_data)
+        time.sleep(10)  # Read every 10 seconds
+
+# --- Database Operations ---
+def save_sensor_data(data):
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute('''INSERT INTO sensor_data (ec, ph, temperature, water_level, light_intensity) 
+                      VALUES (?, ?, ?, ?, ?)''',
+                   (data['ec'], data['ph'], data['temperature'], data['water_level'], data['light_intensity']))
+    conn.commit()
+    conn.close()
+
+# --- Web API ---
+@app.route('/api/latest', methods=['GET'])
+@cache.cached(timeout=CACHE_TIMEOUT)
+def get_latest_data():
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM sensor_data ORDER BY timestamp DESC LIMIT 1')
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return jsonify({
+            "timestamp": row[1],
+            "ec": row[2],
+            "ph": row[3],
+            "temperature": row[4],
+            "water_level": row[5],
+            "light_intensity": row[6]
+        })
+    return jsonify({"error": "No data available"})
+
+@app.route('/api/history', methods=['GET'])
+def get_history():
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM sensor_data ORDER BY timestamp DESC LIMIT 100')
+    rows = cursor.fetchall()
+    conn.close()
+    return jsonify(rows)
+
+@app.route('/api/schedule', methods=['POST'])
+def schedule_event():
+    data = request.json
+    event_type = data.get('event_type')
+    action = data.get('action')
+    start_time = data.get('start_time')
+    end_time = data.get('end_time')
+
+    if event_type == 'light':
+        control_relay(LIGHT_PIN, action)
+    elif event_type == 'pump':
+        control_relay(PUMP_PIN, action)
+
+    return jsonify({"status": "scheduled", "event_type": event_type, "action": action})
+
+@app.route('/api/download', methods=['GET'])
+def download_data():
+    """Allow users to download the database file."""
+    return send_file(DATABASE, as_attachment=True)
+
+# --- Relay Control ---
+def control_relay(pin, action):
+    if action == 'on':
+        GPIO.output(pin, GPIO.HIGH)
+    elif action == 'off':
+        GPIO.output(pin, GPIO.LOW)
+
+# --- Main Execution ---
+if __name__ == '__main__':
+    try:
+        init_database()
+        automation_thread = Thread(target=automation_loop)
+        automation_thread.start()
+        app.run(host='0.0.0.0', port=5000)
+    except KeyboardInterrupt:
+        GPIO.cleanup()
+        print("System shutting down.")
