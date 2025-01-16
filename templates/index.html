@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nutrient Doser Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Nutrient Doser System</h1>
+    </header>
+    <main>
+        <section id="sensor-data">
+            <h2>Sensor Data</h2>
+            <div>
+                <p><strong>pH:</strong> <span id="ph-value">Loading...</span></p>
+                <p><strong>EC:</strong> <span id="ec-value">Loading...</span></p>
+                <p><strong>Temperature:</strong> <span id="temp-value">Loading...</span></p>
+                <p><strong>Water Level:</strong> <span id="water-level">Loading...</span></p>
+            </div>
+        </section>
+
+        <section id="relay-controls">
+            <h2>Relay Controls</h2>
+            <div>
+                <button onclick="toggleRelay('relay1', 'on')">Turn Relay 1 ON</button>
+                <button onclick="toggleRelay('relay1', 'off')">Turn Relay 1 OFF</button>
+                <button onclick="toggleRelay('relay2', 'on')">Turn Relay 2 ON</button>
+                <button onclick="toggleRelay('relay2', 'off')">Turn Relay 2 OFF</button>
+                <button onclick="toggleRelay('relay3', 'on')">Turn Relay 3 ON</button>
+                <button onclick="toggleRelay('relay3', 'off')">Turn Relay 3 OFF</button>
+            </div>
+        </section>
+
+        <section id="data-download">
+            <h2>Download Data</h2>
+            <button onclick="downloadData()">Download Sensor Data</button>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Nutrient Doser System</p>
+    </footer>
+
+    <script>
+        async function fetchSensorData() {
+            const response = await fetch('/api/sensors');
+            const data = await response.json();
+
+            document.getElementById('ph-value').textContent = data.ph;
+            document.getElementById('ec-value').textContent = data.ec;
+            document.getElementById('temp-value').textContent = data.temperature;
+            document.getElementById('water-level').textContent = data.water_level;
+        }
+
+        async function toggleRelay(relay, state) {
+            await fetch('/api/relays', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ relay, state })
+            });
+            alert(`Relay ${relay} turned ${state}`);
+        }
+
+        async function downloadData() {
+            window.location.href = '/api/download';
+        }
+
+        // Initial data fetch
+        fetchSensorData();
+        setInterval(fetchSensorData, 5000); // Update every 5 seconds
+    </script>
+</body>
+</html>
