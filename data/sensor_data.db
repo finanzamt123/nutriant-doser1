@@ -1,0 +1,72 @@
+import sqlite3
+from datetime import datetime
+
+# Pfad zur Datenbank
+DB_PATH = "data/sensor_data.db"
+
+# Verbindung zur Datenbank herstellen
+def connect_db():
+    conn = sqlite3.connect(DB_PATH)
+    return conn
+
+# Tabelle erstellen, falls sie nicht existiert
+def create_table():
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sensor_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            ph REAL,
+            ec REAL,
+            temperature REAL,
+            water_level TEXT
+        );
+    """)
+    conn.commit()
+    conn.close()
+
+# Sensordaten hinzufügen
+def insert_sensor_data(ph, ec, temperature, water_level):
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO sensor_data (ph, ec, temperature, water_level)
+        VALUES (?, ?, ?, ?);
+    """, (ph, ec, temperature, water_level))
+    conn.commit()
+    conn.close()
+
+# Daten abrufen
+def fetch_sensor_data(limit=100):
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM sensor_data
+        ORDER BY timestamp DESC
+        LIMIT ?;
+    """, (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+# Datenbank in eine CSV-Datei exportieren
+def export_to_csv(file_path):
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM sensor_data")
+    rows = cursor.fetchall()
+
+    with open(file_path, "w") as f:
+        # CSV-Kopfzeilen
+        f.write("id,timestamp,ph,ec,temperature,water_level\n")
+        for row in rows:
+            f.write(",".join(map(str, row)) + "\n")
+    
+    conn.close()
+    print(f"Data exported to {file_path}")
+
+# Initialisierung der Datenbank
+if __name__ == "__main__":
+    create_table()
+    print("Database initialized.")
